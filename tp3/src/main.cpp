@@ -60,12 +60,12 @@ static const u1_t PROGMEM APPEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
 // De même pour DEVEUI et APPKEY
-static const u1_t PROGMEM DEVEUI[8] = { 0x01, 0x01, 0x03, 0x02, 0x01, 0x45, 0x7E, 0x0C};
+static const u1_t PROGMEM DEVEUI[8] = { 0x0c, 0x01, 0x03, 0x02, 0x01, 0x45, 0x7E, 0x0C};
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
 
 
-static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x01, 0x0C};
+static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x01, 0x0c};
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
 
@@ -238,13 +238,18 @@ void setup() {
     M5.begin();
     M5.Power.begin();
     Serial.begin(115200); // Initialisation de la communication série
-    Serial.println(F("Starting"));
+    M5.Lcd.setTextColor(RED);
+    M5.Lcd.setTextSize(3);
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setCursor(0, 0);
+    M5.Lcd.print("Hello, world!");
 
     // Attendre 3 secondes avant de continuer
     while (millis() < 3000) {
-        Serial.print("millis: ");
-        Serial.println(millis());
+        M5.Lcd.print("millis: ");
+        M5.Lcd.println(millis());
         delay(100);
+        
     }
 
     #ifdef VCC_ENABLE
