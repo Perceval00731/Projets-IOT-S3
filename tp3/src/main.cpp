@@ -56,15 +56,18 @@
 // first. When copying an EUI from ttnctl output, this means to reverse
 // the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
 // 0x70.
-static const u1_t PROGMEM APPEUI[8] = { FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN };
+static const u1_t PROGMEM APPEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
 // De même pour DEVEUI et APPKEY
-static const u1_t PROGMEM DEVEUI[8] = { FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN };
+static const u1_t PROGMEM DEVEUI[8] = { 0x01, 0x01, 0x03, 0x02, 0x01, 0x45, 0x7E, 0x0C};
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
-static const u1_t PROGMEM APPKEY[16] = { FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN, FILLMEIN };
-void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16);}
+
+
+static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x01, 0x0C};
+
+
 
 static uint8_t mydata[] = "Hello, world!";
 static osjob_t sendjob;
@@ -73,13 +76,18 @@ static osjob_t sendjob;
 // cycle limitations).
 const unsigned TX_INTERVAL = 60;
 
+
+
 // Pin mapping
+// https://docs.m5stack.com/en/module/lora868
 const lmic_pinmap lmic_pins = {
-    .nss = 6,
-    .rxtx = LMIC_UNUSED_PIN,
-    .rst = 5,
-    .dio = {2, 3, 4},
+  .nss = 5,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 26,
+  .dio = {36, 35, LMIC_UNUSED_PIN},
 };
+
+
 
 void printHex2(unsigned v) {
     v &= 0xff;
