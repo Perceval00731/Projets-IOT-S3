@@ -66,7 +66,7 @@ void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
 
 static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x01, 0x0C};
-
+void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
 
 static uint8_t mydata[] = "Hello, world!";
@@ -233,36 +233,36 @@ void onEvent (ev_t ev) {
     }
 }
 
-
 void setup() {
+    // Initialisation de la carte M5Stack
     M5.begin();
     M5.Power.begin();
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.setTextSize(3);
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setCursor(0, 0);
-    Serial.begin(9600);
+    Serial.begin(115200); // Initialisation de la communication série
     Serial.println(F("Starting"));
 
+    // Attendre 3 secondes avant de continuer
+    while (millis() < 3000) {
+        Serial.print("millis: ");
+        Serial.println(millis());
+        delay(100);
+    }
+
     #ifdef VCC_ENABLE
-    // For Pinoccio Scout boards
+    // Pour les cartes Pinoccio Scout
     pinMode(VCC_ENABLE, OUTPUT);
     digitalWrite(VCC_ENABLE, HIGH);
     delay(1000);
     #endif
 
-    // LMIC init
+    // Initialisation de LMIC
     os_init();
-    // Reset the MAC state. Session and pending data transfers will be discarded.
+    // Réinitialiser l'état du MAC. Les sessions et les transferts de données en attente seront supprimés.
     LMIC_reset();
 
-    // Start job (sending automatically starts OTAA too)
+    // Démarrer la tâche (l'envoi démarre automatiquement OTAA aussi)
     do_send(&sendjob);
 }
 
 void loop() {
     os_runloop_once();
 }
-
-
-
