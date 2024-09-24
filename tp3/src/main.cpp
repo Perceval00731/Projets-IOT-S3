@@ -69,7 +69,7 @@ static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x0
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
 
-static uint8_t mydata[] = "Hello, world!";
+static uint8_t mydata[] = "Yo le sang";
 static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
