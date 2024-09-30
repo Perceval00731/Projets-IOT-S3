@@ -59,17 +59,22 @@ void do_send(osjob_t* j) {
 
             // Convertir la chaîne de caractères en octets
             const char* texte = "yo le sang";
-            uint8_t stringData[10];
-            strncpy((char*)stringData, texte, sizeof(stringData));
+            uint8_t stringData[10] = {0}; // Initialiser avec des zéros
+            strncpy((char*)stringData, texte, sizeof(stringData) - 1); // Assurer la terminaison par null
 
             // Concaténer les deux tableaux d'octets
-            uint8_t payload[16];
+            uint8_t payload[16] = {0}; // Initialiser avec des zéros
             memcpy(payload, mydata, sizeof(mydata));
             memcpy(payload + sizeof(mydata), stringData, sizeof(stringData));
 
-            // Envoyer le paquet
-            LMIC_setTxData2(1, payload, sizeof(payload), 0);
-            Serial.println(F("Packet queued"));
+            // Vérifier la taille du payload
+            if (sizeof(payload) <= MAX_PAYLOAD_SIZE) {
+                // Envoyer le paquet
+                LMIC_setTxData2(1, payload, sizeof(payload), 0);
+                Serial.println(F("Packet queued"));
+            } else {
+                Serial.println(F("Payload size exceeds maximum allowed size"));
+            }
         } else {
             Serial.println(F("SCD30 data not available"));
         }
