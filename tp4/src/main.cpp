@@ -1,3 +1,4 @@
+// modifie la couleur de l'écran en rouge si on reçoit un taux de CO2 supérieur à 1000 ppm
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
