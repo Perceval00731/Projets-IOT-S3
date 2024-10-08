@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 
 # Le device
 
@@ -10,7 +10,7 @@ import logging
 # Configuration
 mqttServer = "chirpstack.iut-blagnac.fr"
 appID = "6"
-devEUI = "0c7e450102030110"  # à adapter
+devEUI = "0c7e450102030110" # à adapter
 topic_subscribe = f"application/{appID}/device/{devEUI}/event/up"
 topic_publish = f"application/{appID}/device/{devEUI}/command/down"
 blue = "Ymx1ZQ=="
@@ -42,6 +42,10 @@ def get_data(mqttc, obj, msg):
             
             if co2_concentration is not None:
                 print(f"CO2 Concentration: {co2_concentration} ppm")
+                if co2_concentration > 600 and co2_concentration < 10000:
+                    send(blue)
+                else : 
+                    send(orange)
             else:
                 logging.error("Concentration de CO2 non trouvée dans le message")
         else:
@@ -52,7 +56,8 @@ def get_data(mqttc, obj, msg):
 
 # Fonction d'envoi de commande
 def send(val):
-    # TODO
+    payload = json.dumps({"confirmed": False, "fPort": 5, "data": val})
+    mqttc.publish(topic_publish, payload)
     logging.info(f"Commande envoyée : {val}")
 
 # Connexion et souscription
