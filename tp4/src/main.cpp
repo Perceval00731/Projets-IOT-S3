@@ -1,33 +1,90 @@
-// modifie la couleur de l'écran en rouge si on reçoit un taux de CO2 supérieur à 1000 ppm
+/*******************************************************************************
+ * Copyright (c) 2015 Thomas Telkamp and Matthijs Kooijman
+ * Copyright (c) 2018 Terry Moore, MCCI
+ * TP 4 : IoT IUT de Blagnac
+ * uplink/downlink avec SC30
+ * écran bleu sur mqqt publish
+ *
+ * Permission is hereby granted, free of charge, to anyone
+ * obtaining a copy of this document and accompanying files,
+ * to do whatever they want with them without any restriction,
+ * including, but not limited to, copying, modification and redistribution.
+ * NO WARRANTY OF ANY KIND IS PROVIDED.
+ *
+ * This example sends a valid LoRaWAN packet with payload "Hello,
+ * world!", using frequency and encryption settings matching those of
+ * the The Things Network.
+ *
+ * This uses OTAA (Over-the-air activation), where where a DevEUI and
+ * application key is configured, which are used in an over-the-air
+ * activation procedure where a DevAddr and session keys are
+ * assigned/generated for use with all further communication.
+ *
+ * Note: LoRaWAN per sub-band duty-cycle limitation is enforced (1% in
+ * g1, 0.1% in g2), but not the TTN fair usage policy (which is probably
+ * violated by this sketch when left running for longer)!
+
+ * To use this sketch, first register your application and device with
+ * the things network, to set or generate an AppEUI, DevEUI and AppKey.
+ * Multiple devices can use the same AppEUI, but each device has its own
+ * DevEUI and AppKey.
+ *
+ * Do not forget to define the radio type correctly in
+ * arduino-lmic/project_config/lmic_project_config.h or from your BOARDS.txt.
+ *
+ *******************************************************************************/
+#include <M5Stack.h>
+
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
-#include <M5Stack.h>
-#include <SCD30.h>
-#include <Arduino.h>
 
-// Identifiants LoRaWAN
-static const u1_t PROGMEM APPEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x06 };
+#include <SCD30.h>
+
+uint8_t compteur = 0;
+
+// Compteur pour attente non bloquante
+// Va mesurer les données toutes les 5 sec
+#define DUREE_ATTENTE 5000
+int debut = 0;
+
+
+// This EUI must be in little-endian format, so least-significant-byte
+// first. When copying an EUI from ttnctl output, this means to reverse
+// the bytes. For TTN issued EUIs the last bytes should be 0xD5, 0xB3,
+// 0x70.
+static const u1_t PROGMEM APPEUI[8]={ 0 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
-static const u1_t PROGMEM DEVEUI[8] = { 0x06, 0x01, 0x03, 0x02, 0x01, 0x45, 0x7e, 0x0c };
+// This should also be in little endian format, see above.
+static const u1_t PROGMEM DEVEUI[8]={  0x10, 0x01, 0x03, 0x02, 0x01, 0x45, 0x7E, 0x0C };
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
-static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x01, 0x06 };
+// This key should be in big endian format (or, since it is not really a
+// number but a block of memory, endianness does not really apply). In
+// practice, a key taken from ttnctl can be copied as-is.
+static const u1_t PROGMEM APPKEY[16] = {0x01, 0x02, 0x03, 0x04, 
+                                        0x05, 0x06, 0x07, 0x08,
+                                        0x09, 0x0A, 0x0B, 0x0C,
+                                        0x0D, 0x0E, 0x01, 0x10};
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
+uint8_t mydata[256];
+static uint8_t donneeFixe[] = "Fin TP4 !";
 static osjob_t sendjob;
-const unsigned TX_INTERVAL = 20; // Intervalle de transmission de 20 secondes
 
-// Pin mapping pour M5Stack avec module LoRa
+// Schedule TX every this many seconds (might become longer due to duty
+// cycle limitations).
+const unsigned TX_INTERVAL = 20;
+
+// Pin mapping
+// https://docs.m5stack.com/en/module/lora868
 const lmic_pinmap lmic_pins = {
-  .nss = 5,
+  .nss = 5,                       
   .rxtx = LMIC_UNUSED_PIN,
-  .rst = 26,
-  .dio = {36, 35, LMIC_UNUSED_PIN},
+  .rst = 26,                       
+  .dio = {36, 35, LMIC_UNUSED_PIN}, 
 };
-
-SCD30 airSensor;
 
 void printHex2(unsigned v) {
     v &= 0xff;
@@ -36,125 +93,51 @@ void printHex2(unsigned v) {
     Serial.print(v, HEX);
 }
 
-bool isBase64(unsigned char c) {
-    return (isalnum(c) || (c == '+') || (c == '/'));
+void do_if_data_received()
+{ 
+    M5.Lcd.println("Données reçues : ");
+    // Ecrire sur la console locale l'ensemble du message reçu en hexadécimal
+    // Extrait la data de LMIC.frame
+
+    char donnee[256]; // taille max msg LoRa
+
+    for (int i = 0; i < LMIC.dataLen; i++)
+    {
+    Serial.print(LMIC.frame[LMIC.dataBeg + i], HEX);
+    Serial.print("|");
+    donnee[i] = LMIC.frame[LMIC.dataBeg + i];
+    }
+    donnee[LMIC.dataLen] = '\0'; // ou 0
+
+    if (strcmp(donnee, "blue") == 0)
+    {
+        M5.Lcd.fillScreen(BLUE);
+        Serial.print("\nBleu reçu");
+    }
+    else
+    {
+        M5.Lcd.fillScreen(ORANGE);
+        Serial.print("\nAutre message reçu");
+    
+    }
 }
 
-// Fonction de décodage base64
-String base64_decode(String input) {
-    const char* base64_chars = 
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789+/";
-    int in_len = input.length();
-    int i = 0;
-    int j = 0;
-    int in_ = 0;
-    unsigned char char_array_4[4], char_array_3[3];
-    String ret;
-
-    while (in_len-- && ( input[in_] != '=') && isBase64(input[in_])) {
-        char_array_4[i++] = input[in_]; in_++;
-        if (i == 4) {
-            for (i = 0; i < 4; i++)
-                char_array_4[i] = strchr(base64_chars, char_array_4[i]) - base64_chars;
-
-            char_array_3[0] = ( char_array_4[0] << 2       ) + ((char_array_4[1] & 0x30) >> 4);
-            char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-            char_array_3[2] = ((char_array_4[2] & 0x3) << 6) +   char_array_4[3];
-
-            for (i = 0; (i < 3); i++)
-                ret += char_array_3[i];
-            i = 0;
-        }
-    }
-
-    if (i) {
-        for (j = i; j < 4; j++)
-            char_array_4[j] = 0;
-
-        for (j = 0; j < 4; j++)
-            char_array_4[j] = strchr(base64_chars, char_array_4[j]) - base64_chars;
-
-        char_array_3[0] = ( char_array_4[0] << 2       ) + ((char_array_4[1] & 0x30) >> 4);
-        char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-        char_array_3[2] = ((char_array_4[2] & 0x3) << 6) +   char_array_4[3];
-
-        for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
-    }
-
-    return ret;
-}
-
-
-
-void do_send(osjob_t* j) {
+void do_send(osjob_t* j){
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        static float result[3] = {0};
-        if (airSensor.isAvailable()) {
-            airSensor.getCarbonDioxideConcentration(result);
-            uint16_t co2 = (uint16_t)result[0]; // Convertir la concentration de CO2 en entier
-            uint16_t temp = (uint16_t)(result[1] * 100); // Convertir la température en entier (en centièmes de degré)
-            uint16_t hum = (uint16_t)(result[2] * 100); // Convertir l'humidité en entier (en centièmes de pourcentage)
-
-            // Créer le message à envoyer
-            uint8_t mydata[6];
-            mydata[0] = highByte(co2);
-            mydata[1] = lowByte(co2);
-            mydata[2] = highByte(temp);
-            mydata[3] = lowByte(temp);
-            mydata[4] = highByte(hum);
-            mydata[5] = lowByte(hum);
-
-            // Envoyer le paquet
-            LMIC_setTxData2(1, mydata, sizeof(mydata), 0);
-            Serial.println(F("Packet queued"));
-        } else {
-            Serial.println(F("SCD30 data not available"));
-        }
+        LMIC_setTxData2(1, donneeFixe, sizeof(donneeFixe)-1, 1); // 1 pour confirmation du serveur
+        //compteur = compteur + 1;
+        //Serial.print(" Envoi du message : ");Serial.println(compteur);
+        Serial.println(F("do_send : Packet queued"));
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
-void do_if_data_received() {
-    if (LMIC.dataLen) {
-        // Exemple de décodage des données reçues
-        uint16_t co2 = (LMIC.frame[LMIC.dataBeg + 0] << 8) | LMIC.frame[LMIC.dataBeg + 1];
-        uint16_t temp = (LMIC.frame[LMIC.dataBeg + 2] << 8) | LMIC.frame[LMIC.dataBeg + 3];
-        uint16_t hum = (LMIC.frame[LMIC.dataBeg + 4] << 8) | LMIC.frame[LMIC.dataBeg + 5];
 
-        float temperature = temp / 100.0;
-        float humidity = hum / 100.0;
-
-        Serial.print(F("Received "));
-        Serial.print(LMIC.dataLen);
-        Serial.println(F(" bytes of payload"));
-
-        Serial.print(F("le CO2 est de: "));
-        Serial.print(co2);
-        Serial.println(F(" ppm"));
-
-        Serial.print(F("la temperature est de: "));
-        Serial.print(temperature);
-        Serial.println(F(" °C"));
-
-        Serial.print(F("l'humidite est de: "));
-        Serial.print(humidity);
-        Serial.println(F(" %"));
-
-
-        if(co2 > 1000){
-            M5.Lcd.fillScreen(TFT_RED);
-            Serial.println(F("CO2 > 1000 ppm"));
-        }
-    }
-}
-
-void onEvent(ev_t ev) {
+void onEvent (ev_t ev) {
     Serial.print(os_getTime());
     Serial.print(": ");
     switch(ev) {
@@ -200,8 +183,19 @@ void onEvent(ev_t ev) {
               }
               Serial.println();
             }
+            // Disable link check validation (automatically enabled
+            // during join, but because slow data rates change max TX
+	    // size, we don't use it in this example.
             LMIC_setLinkCheckMode(0);
             break;
+        /*
+        || This event is defined but not used in the code. No
+        || point in wasting codespace on it.
+        ||
+        || case EV_RFU1:
+        ||     Serial.println(F("EV_RFU1"));
+        ||     break;
+        */
         case EV_JOIN_FAILED:
             Serial.println(F("EV_JOIN_FAILED"));
             break;
@@ -212,7 +206,12 @@ void onEvent(ev_t ev) {
             Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
             if (LMIC.txrxFlags & TXRX_ACK)
               Serial.println(F("Received ack"));
-            do_if_data_received(); // Appeler la fonction pour traiter les données reçues
+            if (LMIC.dataLen) {
+              Serial.print(F("Received "));
+              Serial.print(LMIC.dataLen);
+              Serial.println(F(" bytes of payload"));
+              do_if_data_received();
+            }
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
             break;
@@ -223,6 +222,7 @@ void onEvent(ev_t ev) {
             Serial.println(F("EV_RESET"));
             break;
         case EV_RXCOMPLETE:
+            // data received in ping slot
             Serial.println(F("EV_RXCOMPLETE"));
             break;
         case EV_LINK_DEAD:
@@ -231,6 +231,14 @@ void onEvent(ev_t ev) {
         case EV_LINK_ALIVE:
             Serial.println(F("EV_LINK_ALIVE"));
             break;
+        /*
+        || This event is defined but not used in the code. No
+        || point in wasting codespace on it.
+        ||
+        || case EV_SCAN_FOUND:
+        ||    Serial.println(F("EV_SCAN_FOUND"));
+        ||    break;
+        */
         case EV_TXSTART:
             Serial.println(F("EV_TXSTART"));
             break;
@@ -238,10 +246,12 @@ void onEvent(ev_t ev) {
             Serial.println(F("EV_TXCANCELED"));
             break;
         case EV_RXSTART:
+            /* do not print anything -- it wrecks timing */
             break;
         case EV_JOIN_TXCOMPLETE:
             Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
             break;
+
         default:
             Serial.print(F("Unknown event: "));
             Serial.println((unsigned) ev);
@@ -249,38 +259,63 @@ void onEvent(ev_t ev) {
     }
 }
 
+
 void setup() {
-    Serial.begin(115200);
-    M5.begin();
-    M5.Power.begin();
-    Serial.println(F("Starting"));
+  M5.begin(true, false, true, false);
+  //M5.Power.begin();
+  // LCD display
+  M5.Lcd.fillScreen(TFT_BLACK);
+  M5.Lcd.setTextColor(RED);
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setTextWrap(true);
+  M5.Lcd.println("Hello IUT ! - LoRaWAN + SCD30 - TP4");
+  //Serial.begin(115200);
+
+  Serial.println(F("Starting"));
     while (millis() < 4000) {
         Serial.print("millis() = "); Serial.println(millis());
-        delay(500);
+        delay(500);    
     }
 
-    Wire.begin();
-    while (!airSensor.isAvailable()) {
-        Serial.println("SCD30 not detected. Please check wiring.");
-        delay(1000); // Attendre 1 seconde avant de réessayer
-    }
-    Serial.println("SCD30 detected.");
+    // SCD30 init
+    scd30.initialize();
 
-    #ifdef VCC_ENABLE
-    pinMode(VCC_ENABLE, OUTPUT);
-    digitalWrite(VCC_ENABLE, HIGH);
-    delay(1000);
-    #endif
-
+    // LMIC init
     os_init();
+    // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
+    // Start job (sending automatically starts OTAA too)
     do_send(&sendjob);
 }
 
 void loop() {
+
+    // Attente non bloquante pour mesure données
+    // toutes les XX secondes
+    float result[3] = {0};
+
+    if (millis()> debut + DUREE_ATTENTE)
+    {
+    debut=millis();
+    
+    if(scd30.isAvailable()){
+        float result[3];
+        scd30.getCarbonDioxideConcentration(result);
+        // Affiche longueur data ET fabrique la chaîne
+        // Comme on a la main sur l'objet on peut se permettre de faire
+        // un "pré JSON" !
+        snprintf((char*) mydata, sizeof(mydata), "{\"Name\":\"RB\", \"CO2\" : %.1f, \"Temperature\": %.1f, \"Humidity\": %.1f}", result[0], result[1], result[2]);
+        //snprintf((char*) mydata, sizeof(mydata), "CO2 : %.1f, Tem : %.1f, Humidité : %.1f", result[0], result[1], result[2]);
+        // LMIC_setTxData2(1, mydata, strlen((char*)mydata), 0);
+        //LMIC_setTxData2(1, mydata, sizeof(mydata)-1, 0); // 1 pour confirmation du serveur
+        LMIC_setTxData2(1, mydata, strlen((char*)mydata), 0); // 1 pour confirmation du serveur
+        Serial.println("LMIC_setTxData2 appelée et données SCD30 envoyées !");
+
+        compteur = compteur + 1;
+        Serial.print("Paquet numéro : ");Serial.println(compteur);
+        Serial.print("CO2 mesurée : ");Serial.println(result[0]);    
+    }
+    }
+
     os_runloop_once();
 }
-
-
-// pour envoyer un message à l'appareil qui mettra l'écran en rouge
-//mosquitto_pub -h chirpstack.iut-blagnac.fr -t application/6/device/0c7e450102030106/command/down -m '{"confirmed":false,"fPort":5,"data":"c2hlZWVzaCB0aG9tYXM="}'
